@@ -110,3 +110,12 @@ func GetCtxInfoOfLayout(ctx iris.Context, layout string) string {
     })
     return s
 }
+
+// 日志信息中间件, 用于输出当前请求信息
+func CtxLogMiddleware(log interface{ Info(v ...interface{}) }) func(ctx iris.Context) {
+    return func(ctx iris.Context) {
+        SetCtxStart(ctx)
+        ctx.Next()
+        log.Info(GetCtxInfo(ctx))
+    }
+}
