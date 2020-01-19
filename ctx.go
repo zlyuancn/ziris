@@ -18,16 +18,17 @@ import (
 )
 
 const CtxStartTimeField = "ctx_start"
-const DefaultCtxInfoLayout = "[%(status)s] %(latency)s %(ip)s %(method)s %(path)s"
+const DefaultCtxInfoLayout = "[%(status)s] %(latency)s %(ip)s %(method)s %(fullpath)s"
 
 type CtxFormatFlag string
 
 const (
-    CtxStatusFlag  CtxFormatFlag = "status"
-    CtxLatencyFlag CtxFormatFlag = "latency"
-    CtxIPFlag      CtxFormatFlag = "ip"
-    CtxMethodFlag  CtxFormatFlag = "method"
-    CtxPathFlag    CtxFormatFlag = "path"
+    CtxStatusFlag   CtxFormatFlag = "status"
+    CtxLatencyFlag  CtxFormatFlag = "latency"
+    CtxIPFlag       CtxFormatFlag = "ip"
+    CtxMethodFlag   CtxFormatFlag = "method"
+    CtxPathFlag     CtxFormatFlag = "path"
+    CtxFullPathFlag CtxFormatFlag = "fullpath"
 )
 
 var ctxInfoformatParser = regexp.MustCompile(`%\(.*?\)s`)
@@ -89,7 +90,8 @@ func GetCtxInfoOfLayout(ctx iris.Context, layout string) string {
     latency := GetCtxLatency(ctx)
     ip := ctx.RemoteAddr()
     method := ctx.Method()
-    path := ctx.Request().URL.RequestURI()
+    path := ctx.Path()
+    fullpath := ctx.Request().URL.RequestURI()
 
     s := ctxInfoformatParser.ReplaceAllStringFunc(layout, func(flag string) string {
         flag = flag[2 : len(flag)-2]
@@ -104,6 +106,8 @@ func GetCtxInfoOfLayout(ctx iris.Context, layout string) string {
             return method
         case CtxPathFlag:
             return path
+        case CtxFullPathFlag:
+            return fullpath
         default:
             return fmt.Sprintf("(%%(%s)s)invalid)", flag)
         }
