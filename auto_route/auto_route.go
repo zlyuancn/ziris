@@ -159,7 +159,8 @@ func snakeString(s string) string {
 // 注册控制器
 // 控制器对象字段名必须以 Controller 结尾
 // 如果有一个控制器 TestController 并且它有导出的方法 Fn(iris.Context), 那么会自动注册 Get  /test/fn
-// 导出的方法可以控制请求方法, 如 PostFn 表示 Post /xxx/fn
+// 导出的方法可以控制请求方法, 如 TestController.PostFn 表示 Post /xxx/fn
+// 当然, 请求路径可以为空, 如 TestController.Post 表示 Post /xxx
 // 请求路径末尾的数据请使用 ctx.Params().Get("params") 来获取值
 func RegistryController(party iris.Party, a interface{}) {
     RegistryControllerWithCustom(party, a, "", nil)
@@ -192,7 +193,12 @@ func RegistryControllerWithCustom(party iris.Party, a interface{}, name string, 
         }
 
         handler := method.MakeIrisHandler(service)
-        fn(fmt.Sprintf("/%s/%s", service.name, method.path), handler)
-        fn(fmt.Sprintf("/%s/%s/{%s:path}", service.name, method.path, ParamsFieldName), handler)
+        if method.path != "" {
+            fn(fmt.Sprintf("/%s/%s", service.name, method.path), handler)
+            fn(fmt.Sprintf("/%s/%s/{%s:path}", service.name, method.path, ParamsFieldName), handler)
+        } else {
+            fn(fmt.Sprintf("/%s", service.name), handler)
+            fn(fmt.Sprintf("/%s/{%s:path}", service.name, ParamsFieldName), handler)
+        }
     }
 }
