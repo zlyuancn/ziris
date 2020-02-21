@@ -26,6 +26,9 @@ const (
     ParamsFieldName      = "params"
 )
 
+// 全局自定义上下文生成器
+var defaultCustomContextFactory CustomContextFactory = nil
+
 var requestMethods = [...]string{"Get", "Post", "Delete", "Put", "Patch", "Head"}
 var typeOfIrisContext = reflect.TypeOf((*iris.Context)(nil)).Elem()
 
@@ -163,7 +166,7 @@ func snakeString(s string) string {
 // 当然, 请求路径可以为空, 如 TestController.Post 表示 Post /xxx
 // 请求路径末尾的数据请使用 ctx.Params().Get("params") 来获取值
 func RegistryController(party iris.Party, a interface{}) {
-    RegistryControllerWithCustom(party, a, "", nil)
+    RegistryControllerWithCustom(party, a, "", defaultCustomContextFactory)
 }
 
 // 注册控制器并设置控制器名和自定义上下文生成器
@@ -201,4 +204,9 @@ func RegistryControllerWithCustom(party iris.Party, a interface{}, name string, 
             fn(fmt.Sprintf("/%s/{%s:path}", service.name, ParamsFieldName), handler)
         }
     }
+}
+
+// 设置全局自定义上下文生成器
+func SetDefaultCustomContextFactory(factory CustomContextFactory) {
+    defaultCustomContextFactory = factory
 }
