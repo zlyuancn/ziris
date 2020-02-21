@@ -26,8 +26,7 @@ func SetupSwagger(ver iris.Party, path string) {
         ctx.Redirect(p+path+"/index.html", 301)
     })
 
-    // fn := httpSwagger.Handler(httpSwagger.URL(p + path + "/doc.json"))
-    fn := httpSwagger.Handler()
+    fn := httpSwagger.Handler(httpSwagger.URL(p + path + "/doc.json"))
     ver.Get(path+"/{any:path}", func(ctx iris.Context) {
         fn(ctx.ResponseWriter(), ctx.Request())
     })
