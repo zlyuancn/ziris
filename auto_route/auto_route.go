@@ -169,6 +169,16 @@ func RegistryController(party iris.Party, a interface{}) {
     RegistryControllerWithCustom(party, a, "", defaultCustomContextFactory)
 }
 
+// 注册控制器并设置控制器名
+func RegistryControllerWithName(party iris.Party, a interface{}, name string) {
+    RegistryControllerWithCustom(party, a, name, defaultCustomContextFactory)
+}
+
+// 注册控制器并设置自定义上下文生成器
+func RegistryControllerWithFactory(party iris.Party, a interface{}, factory CustomContextFactory) {
+    RegistryControllerWithCustom(party, a, "", factory)
+}
+
 // 注册控制器并设置控制器名和自定义上下文生成器
 func RegistryControllerWithCustom(party iris.Party, a interface{}, name string, factory CustomContextFactory) {
     service := new(controller)
