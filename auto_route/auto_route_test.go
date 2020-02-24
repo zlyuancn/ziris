@@ -11,6 +11,7 @@ package auto_route
 import (
     "context"
     "fmt"
+    "io/ioutil"
     "net/http"
     "testing"
     "time"
@@ -18,14 +19,18 @@ import (
     "github.com/kataras/iris/v12"
 )
 
-var testValue string
-
 type testCtxInterface interface {
     Fullpath() string
 }
 
 type testCtxStruct struct {
+    ctx      iris.Context
     fullpath string
+}
+
+func (m *testCtxStruct) SetResult(a interface{}) {
+    v := a.(*string)
+    _, _ = m.ctx.WriteString(*v)
 }
 
 func (m *testCtxStruct) Fullpath() string {
@@ -35,29 +40,31 @@ func (m *testCtxStruct) Fullpath() string {
 type TestController int
 
 func (t *TestController) Fn(ctx iris.Context) {
-    testValue = "get"
     fmt.Println("method", ctx.Method())
     fmt.Println("path", ctx.Path())
     fmt.Println("fullpath", ctx.Request().URL.RequestURI())
     fmt.Println("params", ctx.Params().Get("params"))
+    _, _ = ctx.WriteString("get")
 }
 func (t *TestController) PostFn(ctx iris.Context) {
-    testValue = "post"
     fmt.Println("method", ctx.Method())
     fmt.Println("path", ctx.Path())
     fmt.Println("fullpath", ctx.Request().URL.RequestURI())
     fmt.Println("params", ctx.Params().Get("params"))
+    _, _ = ctx.WriteString("post")
 }
 
 type TestCustomContextController int
 
-func (t *TestCustomContextController) Fn(a testCtxInterface) {
-    testValue = "get"
+func (t *TestCustomContextController) Fn(a testCtxInterface) *string {
     fmt.Println(a.Fullpath())
+    v := "get"
+    return &v
 }
-func (t *TestCustomContextController) PostFn(a *testCtxStruct) {
-    testValue = "post"
+func (t *TestCustomContextController) PostFn(a *testCtxStruct) *string {
     fmt.Println(a.Fullpath())
+    v := "post"
+    return &v
 }
 
 func testRegistryController(t *testing.T, controller interface{}, factory CustomContextFactory) {
@@ -75,12 +82,13 @@ func testRegistryController(t *testing.T, controller interface{}, factory Custom
             t.Fatal(err)
             return
         }
+        bs, _ := ioutil.ReadAll(resp.Body)
         _ = resp.Body.Close()
 
-        if testValue == "get" {
+        if string(bs) == "get" {
             t.Log("成功")
         } else {
-            t.Fatal("失败了")
+            t.Fatal("失败了", string(bs))
         }
 
         resp, err = http.Post("http://127.0.0.1:8080/test/fn/postparam?a=123", "", nil)
@@ -88,12 +96,13 @@ func testRegistryController(t *testing.T, controller interface{}, factory Custom
             t.Fatal(err)
             return
         }
+        bs, _ = ioutil.ReadAll(resp.Body)
         _ = resp.Body.Close()
 
-        if testValue == "post" {
+        if string(bs) == "post" {
             t.Log("成功")
         } else {
-            t.Fatal("失败了")
+            t.Fatal("失败了", string(bs))
         }
     }()
 
@@ -107,8 +116,9 @@ func TestRegistryController(t *testing.T) {
     testRegistryController(t, new(TestController), nil)
 }
 func TestRegistryWithCustomController(t *testing.T) {
-    testRegistryController(t, new(TestCustomContextController), func(ctx iris.Context) interface{} {
+    testRegistryController(t, new(TestCustomContextController), func(ctx iris.Context) CustomContexter {
         return &testCtxStruct{
+            ctx:      ctx,
             fullpath: ctx.Request().URL.RequestURI(),
         }
     })

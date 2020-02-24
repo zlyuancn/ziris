@@ -14,16 +14,21 @@ import (
     "reflect"
     "strings"
 
+    jsoniter "github.com/json-iterator/go"
     "github.com/kataras/iris/v12"
     "github.com/kataras/iris/v12/context"
     "github.com/kataras/iris/v12/core/router"
+
+    "github.com/zlyuancn/ziris"
 )
 
-// 控制器名后缀
 const (
-    ControllerSuffix     = "Controller"
+    // 控制器名后缀
+    ControllerSuffix = "Controller"
+    // 默认请求方法
     DefaultRequestMethod = "Get"
-    ParamsFieldName      = "params"
+    // 在上下文中保存结尾路径的字段名
+    ParamsFieldName = "params"
 )
 
 // 全局自定义上下文生成器
@@ -32,7 +37,13 @@ var defaultCustomContextFactory CustomContextFactory = nil
 var requestMethods = [...]string{"Get", "Post", "Delete", "Put", "Patch", "Head"}
 var typeOfIrisContext = reflect.TypeOf((*iris.Context)(nil)).Elem()
 
-type CustomContextFactory func(ctx iris.Context) interface{}
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
+
+type CustomContexter interface {
+    // 请求处理完毕后会调用这个方法, 如果请求处理函数没有返回值会传入nil
+    SetResult(a interface{})
+}
+type CustomContextFactory func(ctx iris.Context) CustomContexter
 
 type methodType struct {
     method string // 请求方法
@@ -41,16 +52,44 @@ type methodType struct {
 }
 
 func (m *methodType) MakeIrisHandler(service *controller) iris.Handler {
-    if service.factory == nil {
+    if service.factory != nil {
+        factory := service.factory
         return func(ctx context.Context) {
-            m.fn.Call([]reflect.Value{service.rcvr, reflect.ValueOf(ctx)})
+            a := factory(ctx)
+            returnValues := m.fn.Call([]reflect.Value{service.rcvr, reflect.ValueOf(a)})
+            if len(returnValues) == 1 {
+                a.SetResult(returnValues[0].Interface())
+            } else {
+                a.SetResult(nil)
+            }
         }
     }
 
-    factory := service.factory
     return func(ctx context.Context) {
-        a := factory(ctx)
-        m.fn.Call([]reflect.Value{service.rcvr, reflect.ValueOf(a)})
+        returnValues := m.fn.Call([]reflect.Value{service.rcvr, reflect.ValueOf(ctx)})
+        if len(returnValues) == 1 {
+            v := returnValues[0].Interface()
+            if v == nil {
+                return
+            }
+
+            if err, ok := v.(error); ok {
+                if e, ok := err.(*ziris.ErrorWithCode); ok {
+                    ctx.StatusCode(e.Code())
+                    _, _ = ctx.WriteString(e.Error())
+                    return
+                }
+                ctx.StatusCode(500)
+                _, _ = ctx.WriteString(err.Error())
+            }
+
+            bs, err := json.Marshal(v)
+            if err != nil {
+                ctx.StatusCode(500)
+                _, _ = ctx.WriteString(err.Error())
+            }
+            _, _ = ctx.Write(bs)
+        }
     }
 }
 
@@ -120,9 +159,18 @@ func (m *controller) suitableMethods(typ reflect.Type) []*methodType {
             }
         }
 
-        // 方法不需要输出
-        if mtype.NumOut() != 0 {
+        // 方法只能有一个输出
+        if mtype.NumOut() > 1 {
             continue
+        }
+
+        if mtype.NumOut() == 1 {
+            // 返回值必须是指针或者接口
+            replyType := mtype.Out(0)
+            kind := replyType.Kind()
+            if kind != reflect.Ptr && kind != reflect.Interface {
+                continue
+            }
         }
 
         reqMethod, path := m.parserMethod(method.Name)
