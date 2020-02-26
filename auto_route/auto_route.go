@@ -18,8 +18,6 @@ import (
     "github.com/kataras/iris/v12"
     "github.com/kataras/iris/v12/context"
     "github.com/kataras/iris/v12/core/router"
-
-    "github.com/zlyuancn/ziris"
 )
 
 const (
@@ -74,13 +72,8 @@ func (m *methodType) MakeIrisHandler(service *controller) iris.Handler {
             }
 
             if err, ok := v.(error); ok {
-                if e, ok := err.(*ziris.ErrorWithCode); ok {
-                    ctx.StatusCode(e.Code())
-                    _, _ = ctx.WriteString(e.Error())
-                    return
-                }
-                ctx.StatusCode(500)
                 _, _ = ctx.WriteString(err.Error())
+                return
             }
 
             bs, err := json.Marshal(v)
