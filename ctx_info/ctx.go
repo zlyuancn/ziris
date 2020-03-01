@@ -23,11 +23,17 @@ const DefaultLayout = "[%(status)s] %(latency)s %(ip)s %(method)s %(fullpath)s"
 type FormatFlag string
 
 const (
+    // http状态码
     StatusFlag   FormatFlag = "status"
+    // 延迟时间(处理时间)
     LatencyFlag  FormatFlag = "latency"
+    // 客户端ip
     IPFlag       FormatFlag = "ip"
+    // 请求方法
     MethodFlag   FormatFlag = "method"
+    // 请求路径
     PathFlag     FormatFlag = "path"
+    // 请求路径和请求参数(get参数)
     FullPathFlag FormatFlag = "fullpath"
 )
 
