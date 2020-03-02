@@ -15,28 +15,37 @@ import (
     "io/ioutil"
     "regexp"
     "strconv"
+    "strings"
     "time"
 
     "github.com/kataras/iris/v12"
+
+    "github.com/zlyuancn/ziris"
 )
 
 // 开始时间标记
 const StartTimeField = "ctx_start"
 
-const DefaultLayout = "[%(status)s] %(latency)s %(ip)s %(method)s %(fullpath)s%(brbody)s"
-const DefaultLayoutWithHeader = "[%(status)s] %(latency)s %(ip)s %(method)s %(fullpath)s%(brheader)s%(brbody)s"
+const DefaultLayout = "[%(cstatus)s] %(clatency)s %(ip)s %(cmethod)s %(fullpath)s%(brbody)s"
+const DefaultLayoutWithHeader = "[%(cstatus)s] %(clatency)s %(ip)s %(cmethod)s %(fullpath)s%(brheader)s%(brbody)s"
 
 type FormatFlag string
 
 const (
     // http状态码
     StatusFlag FormatFlag = "status"
+    // 彩色的http状态码
+    CStatusFlag FormatFlag = "cstatus"
     // 延迟时间(处理时间)
     LatencyFlag FormatFlag = "latency"
+    // 彩色的延迟时间(处理时间), 达到1秒黄色, 达到2秒红色
+    CLatencyFlag FormatFlag = "clatency"
     // 客户端ip
     IPFlag FormatFlag = "ip"
     // 请求方法
     MethodFlag FormatFlag = "method"
+    // 彩色的请求方法
+    CMethodFlag FormatFlag = "cmethod"
     // 请求路径
     PathFlag FormatFlag = "path"
     // 请求路径和请求参数(get参数)
@@ -111,12 +120,53 @@ func GetInfoOfLayout(ctx iris.Context, layout string) string {
         switch FormatFlag(flag) {
         case StatusFlag:
             return strconv.Itoa(ctx.GetStatusCode())
+        case CStatusFlag:
+            code := ctx.GetStatusCode()
+            code_text := strconv.Itoa(code)
+            if code < 200 {
+                return ziris.MakeColorText(ziris.ColorBlue, code_text)
+            } else if code < 300 {
+                return ziris.MakeColorText(ziris.ColorCyan, code_text)
+            } else if code < 400 {
+                return ziris.MakeColorText(ziris.ColorYellow, code_text)
+            } else if code < 600 {
+                return ziris.MakeColorText(ziris.ColorRed, code_text)
+            }
+            return code_text
         case LatencyFlag:
             return GetLatency(ctx).String()
+        case CLatencyFlag:
+            latency := GetLatency(ctx)
+            latency_text := latency.String()
+            if latency < 1e9 {
+                return latency_text
+            } else if latency < 2e9 {
+                return ziris.MakeColorText(ziris.ColorCyan, latency_text)
+            }
+            return ziris.MakeColorText(ziris.ColorRed, latency_text)
         case IPFlag:
             return ctx.RemoteAddr()
         case MethodFlag:
             return ctx.Method()
+        case CMethodFlag:
+            method := ctx.Method()
+            switch strings.ToLower(method) {
+            case "get":
+                return ziris.MakeColorText(ziris.ColorCyan, method)
+            case "post":
+                return ziris.MakeColorText(ziris.ColorBlue, method)
+            case "put":
+                return ziris.MakeColorText(ziris.ColorYellow, method)
+            case "delete":
+                return ziris.MakeColorText(ziris.ColorRed, method)
+            case "head":
+                return ziris.MakeColorText(ziris.ColorYellow, method)
+            case "patch":
+                return ziris.MakeColorText(ziris.ColorYellow, method)
+            case "options":
+                return ziris.MakeColorText(ziris.ColorYellow, method)
+            }
+            return method
         case PathFlag:
             return ctx.Path()
         case FullPathFlag:
