@@ -141,7 +141,7 @@ func GetInfoOfLayout(ctx iris.Context, layout string) string {
             if latency < 1e9 {
                 return latency_text
             } else if latency < 2e9 {
-                return ziris.MakeColorText(ziris.ColorCyan, latency_text)
+                return ziris.MakeColorText(ziris.ColorYellow, latency_text)
             }
             return ziris.MakeColorText(ziris.ColorRed, latency_text)
         case IPFlag:
