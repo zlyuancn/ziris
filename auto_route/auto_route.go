@@ -152,18 +152,9 @@ func (m *controller) suitableMethods(typ reflect.Type) []*methodType {
             }
         }
 
-        // 方法只能有一个输出
+        // 方法最多只能有一个输出
         if mtype.NumOut() > 1 {
             continue
-        }
-
-        if mtype.NumOut() == 1 {
-            // 返回值必须是指针或者接口
-            replyType := mtype.Out(0)
-            kind := replyType.Kind()
-            if kind != reflect.Ptr && kind != reflect.Interface {
-                continue
-            }
         }
 
         reqMethod, path := m.parserMethod(method.Name)
