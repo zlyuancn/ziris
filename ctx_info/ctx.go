@@ -30,6 +30,8 @@ const StartTimeField = "ctx_start"
 const DefaultLayout = "[%(cstatus)s] %(clatency)s %(ip)s %(cmethod)s %(fullpath)s%(brbody)s"
 const DefaultLayoutWithHeader = "[%(cstatus)s] %(clatency)s %(ip)s %(cmethod)s %(fullpath)s%(brheader)s%(brbody)s"
 
+var defaultLayout = DefaultLayout
+
 type FormatFlag string
 
 const (
@@ -113,7 +115,7 @@ func GetLatency(ctx iris.Context) time.Duration {
 
 // 获取描述信息
 func GetInfo(ctx iris.Context) string {
-    return GetInfoOfLayout(ctx, DefaultLayout)
+    return GetInfoOfLayout(ctx, defaultLayout)
 }
 
 // 获取描述信息并指定样式
@@ -241,4 +243,9 @@ func SetHeaderFilter(filter ...zmap.MapFilter) {
 // 添加header过滤器
 func AddHeaderFilter(filter ...zmap.MapFilter) {
     headerFilters = append(headerFilters, filter...)
+}
+
+// 设置默认样式
+func SetDefaultLayout(layout string) {
+    defaultLayout = layout
 }
