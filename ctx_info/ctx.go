@@ -19,6 +19,7 @@ import (
     "time"
 
     "github.com/kataras/iris/v12"
+    "github.com/zlyuancn/zmap"
 
     "github.com/zlyuancn/ziris"
 )
@@ -61,6 +62,8 @@ const (
 )
 
 var formatParser = regexp.MustCompile(`%\(.*?\)s`)
+
+var headerFilters = []zmap.MapFilter{}
 
 // 设置开始时间, 将当前时间戳放入 ctx.Values() 的 StartTimeField 字段中
 func SetStartTime(ctx iris.Context) bool {
@@ -178,7 +181,7 @@ func GetInfoOfLayout(ctx iris.Context, layout string) string {
             }
 
             header := ctx.Request().Header
-            hm := make(map[string]interface{}, len(header))
+            hm := make(zmap.M, len(header))
             for k, v := range header {
                 switch len(v) {
                 case 1:
@@ -189,6 +192,7 @@ func GetInfoOfLayout(ctx iris.Context, layout string) string {
                     hm[k] = v
                 }
             }
+            hm.Filter(headerFilters...)
 
             h, _ := json.MarshalIndent(hm, "", "    ")
             buff.Write(h)
@@ -227,4 +231,14 @@ func LogMiddleware(log interface{ Info(v ...interface{}) }) func(ctx iris.Contex
         ctx.Next()
         log.Info(GetInfo(ctx))
     }
+}
+
+// 设置header过滤器
+func SetHeaderFilter(filter ...zmap.MapFilter) {
+    headerFilters = append(([]zmap.MapFilter)(nil), filter...)
+}
+
+// 添加header过滤器
+func AddHeaderFilter(filter ...zmap.MapFilter) {
+    headerFilters = append(headerFilters, filter...)
 }
