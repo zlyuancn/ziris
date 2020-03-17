@@ -69,7 +69,7 @@ func (t *TestCustomContextController) PostFn(a *testCtxStruct) *string {
 
 func testRegistryController(t *testing.T, controller interface{}, factory CustomContextFactory) {
     app := iris.New()
-    RegistryControllerWithCustom(app, controller, "test", factory)
+    NewControllerWithCustom(controller, "test", factory).Route(app)
 
     go func() {
         time.Sleep(1e9)
@@ -115,6 +115,7 @@ func testRegistryController(t *testing.T, controller interface{}, factory Custom
 func TestRegistryController(t *testing.T) {
     testRegistryController(t, new(TestController), nil)
 }
+
 func TestRegistryWithCustomController(t *testing.T) {
     testRegistryController(t, new(TestCustomContextController), func(ctx iris.Context) CustomContexter {
         return &testCtxStruct{

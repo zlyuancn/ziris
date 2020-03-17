@@ -9,7 +9,6 @@
 package auto_route
 
 import (
-    "errors"
     "fmt"
     "reflect"
     "strings"
@@ -17,7 +16,6 @@ import (
     jsoniter "github.com/json-iterator/go"
     "github.com/kataras/iris/v12"
     "github.com/kataras/iris/v12/context"
-    "github.com/kataras/iris/v12/core/router"
 )
 
 const (
@@ -29,53 +27,48 @@ const (
     ParamsFieldName = "params"
 )
 
-// 全局自定义上下文生成器
-var defaultCustomContextFactory CustomContextFactory = nil
-
 var requestMethods = [...]string{"Get", "Post", "Delete", "Put", "Patch", "Head"}
 var typeOfIrisContext = reflect.TypeOf((*iris.Context)(nil)).Elem()
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-type CustomContexter interface {
-    // 请求处理完毕后会调用这个方法, 如果请求处理函数没有返回值会传入nil
-    SetResult(a interface{})
-}
-type CustomContextFactory func(ctx iris.Context) CustomContexter
-
 type methodType struct {
-    method string // 请求方法
-    path   string // 请求路径
-    fn     reflect.Value
+    reqMethod     string // 请求方法
+    controlMethod string // 控制器方法
+    fn            reflect.Value
 }
 
-func (m *methodType) MakeIrisHandler(service *controller) iris.Handler {
+func (m *methodType) Handler(service *controller, ctx context.Context) {
     if service.factory != nil {
         factory := service.factory
-        return func(ctx context.Context) {
-            a := factory(ctx)
-            returnValues := m.fn.Call([]reflect.Value{service.rcvr, reflect.ValueOf(a)})
-            if len(returnValues) == 1 {
-                a.SetResult(returnValues[0].Interface())
-            } else {
-                a.SetResult(nil)
-            }
+        a := factory(ctx)
+        returnValues := m.fn.Call([]reflect.Value{service.rcvr, reflect.ValueOf(a)})
+        if len(returnValues) == 1 {
+            a.SetResult(returnValues[0].Interface())
+        } else {
+            a.SetResult(nil)
         }
+        return
     }
 
-    return func(ctx context.Context) {
-        returnValues := m.fn.Call([]reflect.Value{service.rcvr, reflect.ValueOf(ctx)})
-        if len(returnValues) == 1 {
-            v := returnValues[0].Interface()
-            if v == nil {
-                return
-            }
+    returnValues := m.fn.Call([]reflect.Value{service.rcvr, reflect.ValueOf(ctx)})
+    if len(returnValues) == 1 {
+        v := returnValues[0].Interface()
+        if v == nil {
+            return
+        }
 
-            if err, ok := v.(error); ok {
-                _, _ = ctx.WriteString(err.Error())
-                return
-            }
+        if err, ok := v.(error); ok {
+            _, _ = ctx.WriteString(err.Error())
+            return
+        }
 
+        switch data := v.(type) {
+        case []byte:
+            _, _ = ctx.Write(data)
+        case *[]byte:
+            _, _ = ctx.Write(*data)
+        default:
             bs, err := json.Marshal(v)
             if err != nil {
                 ctx.StatusCode(500)
@@ -87,42 +80,65 @@ func (m *methodType) MakeIrisHandler(service *controller) iris.Handler {
 }
 
 type controller struct {
-    name    string
-    rcvr    reflect.Value
-    typ     reflect.Type
-    methods []*methodType
-    factory CustomContextFactory
+    name        string
+    parentPath  string
+    rcvr        reflect.Value
+    typ         reflect.Type
+    methods     map[string]*methodType
+    factory     CustomContextFactory
+    reqHandlers []ReqMiddleware
 }
 
-func (m *controller) Parse(a interface{}, name string, factory CustomContextFactory) error {
+// 创建控制器
+func NewController(a interface{}) *controller {
+    return NewControllerWithCustom(a, "", nil)
+}
+
+// 创建控制器并设置控制器名和自定义上下文生成器
+func NewControllerWithCustom(a interface{}, name string, factory CustomContextFactory) *controller {
+    m := new(controller)
     m.typ = reflect.TypeOf(a)
     m.rcvr = reflect.ValueOf(a)
 
-    sname := reflect.Indirect(m.rcvr).Type().Name()
-    if sname == "" {
-        return errors.New("无法获取控制器的名称")
-    }
-    if !strings.HasSuffix(sname, ControllerSuffix) {
-        return fmt.Errorf("控制器 <%s> 后缀不是 %s", sname, ControllerSuffix)
-    }
-    sname = sname[:len(sname)-len(ControllerSuffix)]
+    if name == "" {
+        sname := reflect.Indirect(m.rcvr).Type().Name()
+        if sname == "" {
+            panic("无法获取控制器的名称")
+        }
 
-    if name != "" {
-        sname = name
-    }
-    if sname == "" {
-        return errors.New("控制器没有名称")
+        if strings.HasSuffix(sname, ControllerSuffix) {
+            sname = sname[:len(sname)-len(ControllerSuffix)]
+        }
+
+        name = sname
     }
 
-    m.name = snakeString(sname)
+    if name == "" {
+        panic("控制器没有名称")
+    }
+
+    m.name = snakeString(name)
     m.factory = factory
     m.methods = m.suitableMethods(m.typ)
-    return nil
+    return m
+}
+
+// 注册控制器
+func (m *controller) Registry(party iris.Party, handler ...ReqMiddleware) {
+    path := party.GetRelPath()
+    if strings.HasSuffix(path, "/") {
+        path = path[:len(path)-1]
+    }
+    m.parentPath = path
+    party.CreateRoutes(nil, fmt.Sprintf("/%s", m.name), m.handler)
+    party.CreateRoutes(nil, fmt.Sprintf("/%s/{%s:path}", m.name, ParamsFieldName), m.handler)
+
+    m.reqHandlers = append(([]ReqMiddleware)(nil), handler...)
 }
 
 // 匹配方法
-func (m *controller) suitableMethods(typ reflect.Type) []*methodType {
-    methods := make([]*methodType, 0)
+func (m *controller) suitableMethods(typ reflect.Type) map[string]*methodType {
+    methods := make(map[string]*methodType, 0)
     for i := 0; i < typ.NumMethod(); i++ {
         method := typ.Method(i)
         mtype := method.Type
@@ -157,20 +173,69 @@ func (m *controller) suitableMethods(typ reflect.Type) []*methodType {
             continue
         }
 
-        reqMethod, path := m.parserMethod(method.Name)
-        methods = append(methods, &methodType{method: reqMethod, path: path, fn: method.Func})
+        reqMethod, controlMethod := m.parserMethod(method.Name)
+        key := m.makeMethodKey(reqMethod, controlMethod)
+        methods[key] = &methodType{reqMethod: reqMethod, controlMethod: controlMethod, fn: method.Func}
     }
     return methods
 }
 
-// 将方法转为为请求方法和路径
-func (m *controller) parserMethod(method string) (string, string) {
+// 将方法转为为请求方法和控制器方法
+func (m *controller) parserMethod(method string) (reqMethod string, controlMethod string) {
     for _, s := range requestMethods {
         if strings.HasPrefix(method, s) {
             return s, snakeString(method[len(s):])
         }
     }
     return DefaultRequestMethod, snakeString(method)
+}
+
+// 根据请求方法和控制器方法构建methods的key
+func (m *controller) makeMethodKey(reqMethod, controlMethod string) string {
+    return fmt.Sprintf("%s/%s", strings.ToLower(reqMethod), controlMethod)
+}
+
+func (m *controller) handler(ctx iris.Context) {
+    reqMethod := ctx.Method()
+    rawParams := ctx.Params().Get(ParamsFieldName)
+    rawParams = strings.Trim(rawParams, "/")
+
+    controlMethod, params := rawParams, ""
+
+    // 分离参数
+    if k := strings.Index(rawParams, "/"); k != -1 {
+        controlMethod, params = rawParams[:k], rawParams[k+1:]
+    }
+
+    // 如果没有该方法, 并且存在空方法时, 则方法为空
+    if _, ok := m.methods[m.makeMethodKey(reqMethod, controlMethod)]; !ok {
+        if _, ok = m.methods[m.makeMethodKey(reqMethod, "")]; ok {
+            controlMethod, params = "", rawParams
+        }
+    }
+
+    reqArg := &ReqArg{
+        controlMethod: controlMethod,
+        params:        params,
+    }
+
+    // 中间件
+    for _, handler := range m.reqHandlers {
+        handler(ctx, reqArg)
+        if reqArg.stop {
+            return
+        }
+    }
+
+    ctx.Params().Save(ParamsFieldName, reqArg.Params, true)
+    control, ok := m.methods[m.makeMethodKey(reqMethod, reqArg.ControlMethod())]
+    if !ok {
+        ctx.StatusCode(400)
+        _, _ = ctx.WriteString(fmt.Sprintf("未定义的路由: [%s] <%s/%s/%s>", reqMethod, m.parentPath, m.name, reqArg.ControlMethod()))
+        return
+    }
+
+    control.Handler(m, ctx)
 }
 
 // 转为蛇形字符串
@@ -197,58 +262,22 @@ func snakeString(s string) string {
 // 导出的方法可以控制请求方法, 如 TestController.PostFn 表示 Post /xxx/fn
 // 当然, 请求路径可以为空, 如 TestController.Post 表示 Post /xxx
 // 请求路径末尾的数据请使用 ctx.Params().Get("params") 来获取值
-func RegistryController(party iris.Party, a interface{}) {
-    RegistryControllerWithCustom(party, a, "", defaultCustomContextFactory)
+func RegistryController(party iris.Party, a interface{}, handler ...ReqMiddleware) {
+    RegistryControllerWithCustom(party, a, "", defaultCustomContextFactory, handler...)
 }
 
 // 注册控制器并设置控制器名
-func RegistryControllerWithName(party iris.Party, a interface{}, name string) {
-    RegistryControllerWithCustom(party, a, name, defaultCustomContextFactory)
+func RegistryControllerWithName(party iris.Party, a interface{}, name string, handler ...ReqMiddleware) {
+    RegistryControllerWithCustom(party, a, name, defaultCustomContextFactory, handler...)
 }
 
 // 注册控制器并设置自定义上下文生成器
-func RegistryControllerWithFactory(party iris.Party, a interface{}, factory CustomContextFactory) {
-    RegistryControllerWithCustom(party, a, "", factory)
+func RegistryControllerWithFactory(party iris.Party, a interface{}, factory CustomContextFactory, handler ...ReqMiddleware) {
+    RegistryControllerWithCustom(party, a, "", factory, handler...)
 }
 
 // 注册控制器并设置控制器名和自定义上下文生成器
-func RegistryControllerWithCustom(party iris.Party, a interface{}, name string, factory CustomContextFactory) {
-    service := new(controller)
-    if err := service.Parse(a, name, factory); err != nil {
-        panic(err)
-    }
-
-    for _, method := range service.methods {
-        var fn func(string, ...context.Handler) *router.Route
-        switch strings.ToLower(method.method) {
-        case "get":
-            fn = party.Get
-        case "post":
-            fn = party.Post
-        case "delete":
-            fn = party.Delete
-        case "put":
-            fn = party.Put
-        case "patch":
-            fn = party.Patch
-        case "head":
-            fn = party.Head
-        default:
-            panic(fmt.Sprintf("未知的请求方法<%s>", method.method))
-        }
-
-        handler := method.MakeIrisHandler(service)
-        if method.path != "" {
-            fn(fmt.Sprintf("/%s/%s", service.name, method.path), handler)
-            fn(fmt.Sprintf("/%s/%s/{%s:path}", service.name, method.path, ParamsFieldName), handler)
-        } else {
-            fn(fmt.Sprintf("/%s", service.name), handler)
-            fn(fmt.Sprintf("/%s/{%s:path}", service.name, ParamsFieldName), handler)
-        }
-    }
-}
-
-// 设置全局自定义上下文生成器
-func SetDefaultCustomContextFactory(factory CustomContextFactory) {
-    defaultCustomContextFactory = factory
+func RegistryControllerWithCustom(party iris.Party, a interface{}, name string, factory CustomContextFactory, handler ...ReqMiddleware) {
+    service := NewControllerWithCustom(a, name, factory)
+    service.Route(party, handler...)
 }
