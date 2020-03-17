@@ -227,7 +227,7 @@ func (m *controller) handler(ctx iris.Context) {
         }
     }
 
-    ctx.Params().Save(ParamsFieldName, reqArg.Params, true)
+    ctx.Params().Save(ParamsFieldName, reqArg.Params(), true)
     control, ok := m.methods[m.makeMethodKey(reqMethod, reqArg.ControlMethod())]
     if !ok {
         ctx.StatusCode(400)
