@@ -279,5 +279,5 @@ func RegistryControllerWithFactory(party iris.Party, a interface{}, factory Cust
 // 注册控制器并设置控制器名和自定义上下文生成器
 func RegistryControllerWithCustom(party iris.Party, a interface{}, name string, factory CustomContextFactory, handler ...ReqMiddleware) {
     service := NewControllerWithCustom(a, name, factory)
-    service.Route(party, handler...)
+    service.Registry(party, handler...)
 }
