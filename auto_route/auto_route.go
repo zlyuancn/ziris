@@ -91,7 +91,7 @@ type controller struct {
 
 // 创建控制器
 func NewController(a interface{}) *controller {
-    return NewControllerWithCustom(a, "", nil)
+    return NewControllerWithCustom(a, "", defaultCustomContextFactory)
 }
 
 // 创建控制器并设置控制器名和自定义上下文生成器
