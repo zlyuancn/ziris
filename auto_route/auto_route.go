@@ -40,7 +40,7 @@ type methodType struct {
 func (m *methodType) Handler(service *controller, ctx iris.Context) {
     if service.factory != nil {
         a := ctx.(CustomContexter)
-        returnValues := m.fn.Call([]reflect.Value{service.rcvr, reflect.ValueOf(a)})
+        returnValues := m.fn.Call([]reflect.Value{reflect.New(service.typ), reflect.ValueOf(a)})
         if len(returnValues) == 1 {
             a.SetResult(returnValues[0].Interface())
         } else {
@@ -49,7 +49,7 @@ func (m *methodType) Handler(service *controller, ctx iris.Context) {
         return
     }
 
-    returnValues := m.fn.Call([]reflect.Value{service.rcvr, reflect.ValueOf(ctx)})
+    returnValues := m.fn.Call([]reflect.Value{reflect.New(service.typ), reflect.ValueOf(ctx)})
     if len(returnValues) == 1 {
         v := returnValues[0].Interface()
         if v == nil {
@@ -80,7 +80,6 @@ func (m *methodType) Handler(service *controller, ctx iris.Context) {
 type controller struct {
     name        string
     parentPath  string
-    rcvr        reflect.Value
     typ         reflect.Type
     methods     map[string]*methodType
     factory     CustomContextFactory
@@ -94,12 +93,15 @@ func NewController(a interface{}) *controller {
 
 // 创建控制器并设置控制器名和自定义上下文生成器
 func NewControllerWithCustom(a interface{}, name string, factory CustomContextFactory) *controller {
+    typ := reflect.TypeOf(a)
+    if typ.Kind() != reflect.Ptr {
+        panic("必须传入一个指针或接口")
+    }
     m := new(controller)
-    m.typ = reflect.TypeOf(a)
-    m.rcvr = reflect.ValueOf(a)
+    m.typ = typ.Elem()
 
     if name == "" {
-        sname := reflect.Indirect(m.rcvr).Type().Name()
+        sname := m.typ.Name()
         if sname == "" {
             panic("无法获取控制器的名称")
         }
@@ -117,7 +119,7 @@ func NewControllerWithCustom(a interface{}, name string, factory CustomContextFa
 
     m.name = SnakeString(name)
     m.factory = factory
-    m.methods = m.suitableMethods(m.typ)
+    m.methods = m.suitableMethods(typ)
     return m
 }
 

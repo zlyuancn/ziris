@@ -113,11 +113,11 @@ func testRegistryController(t *testing.T, controller interface{}, factory Custom
 }
 
 func TestRegistryController(t *testing.T) {
-    testRegistryController(t, new(TestController), nil)
+    testRegistryController(t, (*TestController)(nil), nil)
 }
 
 func TestRegistryWithCustomController(t *testing.T) {
-    testRegistryController(t, new(TestCustomContextController), func(ctx iris.Context) CustomContexter {
+    testRegistryController(t, (*TestCustomContextController)(nil), func(ctx iris.Context) CustomContexter {
         return &testCtxStruct{
             Context:  ctx,
             fullpath: ctx.Request().URL.RequestURI(),
