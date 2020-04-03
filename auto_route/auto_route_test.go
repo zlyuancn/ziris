@@ -24,13 +24,13 @@ type testCtxInterface interface {
 }
 
 type testCtxStruct struct {
-    ctx      iris.Context
+    iris.Context
     fullpath string
 }
 
 func (m *testCtxStruct) SetResult(a interface{}) {
     v := a.(*string)
-    _, _ = m.ctx.WriteString(*v)
+    _, _ = m.WriteString(*v)
 }
 
 func (m *testCtxStruct) Fullpath() string {
@@ -119,7 +119,7 @@ func TestRegistryController(t *testing.T) {
 func TestRegistryWithCustomController(t *testing.T) {
     testRegistryController(t, new(TestCustomContextController), func(ctx iris.Context) CustomContexter {
         return &testCtxStruct{
-            ctx:      ctx,
+            Context:  ctx,
             fullpath: ctx.Request().URL.RequestURI(),
         }
     })

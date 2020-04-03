@@ -15,7 +15,6 @@ import (
 
     jsoniter "github.com/json-iterator/go"
     "github.com/kataras/iris/v12"
-    "github.com/kataras/iris/v12/context"
 )
 
 const (
@@ -38,14 +37,9 @@ type methodType struct {
     fn            reflect.Value
 }
 
-func (m *methodType) Handler(service *controller, ctx context.Context) {
+func (m *methodType) Handler(service *controller, ctx iris.Context) {
     if service.factory != nil {
-        factory := service.factory
-        a := factory(ctx)
-        if a == nil {
-            return
-        }
-
+        a := ctx.(CustomContexter)
         returnValues := m.fn.Call([]reflect.Value{service.rcvr, reflect.ValueOf(a)})
         if len(returnValues) == 1 {
             a.SetResult(returnValues[0].Interface())
@@ -221,6 +215,13 @@ func (m *controller) handler(ctx iris.Context) {
     reqArg := &ReqArg{
         controlMethod: controlMethod,
         params:        params,
+    }
+
+    if m.factory != nil {
+        ctx = m.factory(ctx)
+        if ctx == nil {
+            return
+        }
     }
 
     // 中间件
