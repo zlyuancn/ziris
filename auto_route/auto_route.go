@@ -115,7 +115,7 @@ func NewControllerWithCustom(a interface{}, name string, factory CustomContextFa
         panic("控制器没有名称")
     }
 
-    m.name = snakeString(name)
+    m.name = SnakeString(name)
     m.factory = factory
     m.methods = m.suitableMethods(m.typ)
     return m
@@ -182,10 +182,10 @@ func (m *controller) suitableMethods(typ reflect.Type) map[string]*methodType {
 func (m *controller) parserMethod(method string) (reqMethod string, controlMethod string) {
     for _, s := range requestMethods {
         if strings.HasPrefix(method, s) {
-            return s, snakeString(method[len(s):])
+            return s, SnakeString(method[len(s):])
         }
     }
-    return DefaultRequestMethod, snakeString(method)
+    return DefaultRequestMethod, SnakeString(method)
 }
 
 // 根据请求方法和控制器方法构建methods的key
@@ -244,7 +244,7 @@ func (m *controller) handler(ctx iris.Context) {
 }
 
 // 转为蛇形字符串
-func snakeString(s string) string {
+func SnakeString(s string) string {
     data := make([]byte, 0, len(s)*2)
     j := false
     num := len(s)
