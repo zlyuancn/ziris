@@ -42,6 +42,10 @@ func (m *methodType) Handler(service *controller, ctx context.Context) {
     if service.factory != nil {
         factory := service.factory
         a := factory(ctx)
+        if a == nil {
+            return
+        }
+
         returnValues := m.fn.Call([]reflect.Value{service.rcvr, reflect.ValueOf(a)})
         if len(returnValues) == 1 {
             a.SetResult(returnValues[0].Interface())
